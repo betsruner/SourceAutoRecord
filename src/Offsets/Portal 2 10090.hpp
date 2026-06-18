@@ -425,6 +425,10 @@ SIGSCAN_DEFAULT(GetNumChapters, "55 8B EC 80 7D 08 00 57 74 0C",
                                 "55 89 E5 56 80 7D")
 SIGSCAN_DEFAULT(CPortalLeaderboardPanel_OnThink, "55 8B EC A1 ? ? ? ? 81 EC ? ? ? ? 53 56 32 DB",
                                                  "55 89 E5 57 56 53 81 EC ? ? ? ? 65 A1 ? ? ? ? 89 45 E4 31 C0 A1 ? ? ? ? 8B 5D 08 8B 70 30")
+SIGSCAN_DEFAULT(CPortalLeaderboardManager_Get, "B8 ? ? ? ? C3 CC CC CC CC CC CC CC CC CC CC 8B C1 8B 0D",
+                                               "B8 ? ? ? ? C3 8D B4 26 ? ? ? ? 8D 76 ? 57 56 53 8B 7C 24 ? 8B 4F")
+SIGSCAN_DEFAULT(CPortalLeaderboardManager_GetLeaderboard, "55 8B EC 51 A1 ? ? ? ? 53 8B D9",
+                                                          "55 89 E5 57 56 53 83 EC ? A1 ? ? ? ? 8B 5D ? 85 C0 74")
 SIGSCAN_DEFAULT(OnEvent, "55 8B EC 57 8B F9 8B 4D 08 E8",
                          "55 89 E5 57 56 53 83 EC 1C 8B 45 0C 8B 7D 08 89 04 24 E8 ? ? ? ? C7 04 24")
 SIGSCAN_DEFAULT(OnCommand, "55 8B EC 56 57 8B 7D 08 57 68 ? ? ? ? 8B F1 E8 ? ? ? ? 83 C4 08 85 C0 0F 84",
