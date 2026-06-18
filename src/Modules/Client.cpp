@@ -354,10 +354,38 @@ DETOUR_T(const char *, Client::GetName) {
 	return Client::GetName(thisptr);
 }
 
+static void *(*GetPortalLeaderboardManager)() = nullptr;
+static unsigned int challengeLeaderboardPreloadGeneration = 0;
+
+static void PreloadChallengeLeaderboard(const std::string &mapName, unsigned int generation, int attempts = 0) {
+	if (generation != challengeLeaderboardPreloadGeneration || sar_disable_challenge_stats_hud.GetInt() != -1) return;
+	if (!GetPortalLeaderboardManager || !Client::GetLeaderboard) return;
+
+	auto currentMap = engine->GetLevelNameShort(engine->engineClient->ThisPtr());
+	if (!currentMap || mapName != currentMap) return;
+
+	auto manager = GetPortalLeaderboardManager();
+	if (manager && Client::GetLeaderboard(manager, mapName.c_str())) return;
+
+	// The native panel retries while Steam or another leaderboard request is busy.
+	if (attempts < 600) {
+		Scheduler::InHostTicks(1, [mapName, generation, attempts]() {
+			PreloadChallengeLeaderboard(mapName, generation, attempts + 1);
+		});
+	}
+}
+
 DETOUR_COMMAND(Client::openleaderboard) {
 	Client::openleaderboard_callback(args);
 
 	if (args.ArgC() == 2 && !strcmp(args[1], "4") && client->GetChallengeStatus() == CMStatus::CHALLENGE) {
+		if (sar_disable_challenge_stats_hud.GetInt() == -1 && GetPortalLeaderboardManager && Client::GetLeaderboard) {
+			auto mapName = engine->GetLevelNameShort(engine->engineClient->ThisPtr());
+			if (mapName && mapName[0]) {
+				PreloadChallengeLeaderboard(mapName, ++challengeLeaderboardPreloadGeneration);
+			}
+		}
+
 		client->g_leaderboardOpen = true;
 		auto ticks = 6;
 		if (sar_disable_challenge_stats_hud.GetInt() > 1) ticks = sar_disable_challenge_stats_hud.GetInt();
@@ -1189,6 +1217,12 @@ bool Client::Init() {
 
 	if (sar.game->Is(SourceGame_Portal2)) {
 		Client::CalcViewModelLag = (decltype(Client::CalcViewModelLag))Memory::Scan(client->Name(), Offsets::CalcViewModelLag);
+
+		GetPortalLeaderboardManager = (decltype(GetPortalLeaderboardManager))Memory::Scan(client->Name(), Offsets::CPortalLeaderboardManager_Get);
+		Client::GetLeaderboard = (decltype(Client::GetLeaderboard))Memory::Scan(client->Name(), Offsets::CPortalLeaderboardManager_GetLeaderboard);
+		if (!GetPortalLeaderboardManager || !Client::GetLeaderboard) {
+			console->DevWarning("Failed to initialize challenge leaderboard preload\n");
+		}
 	}
 
 	g_CalcViewModelLagHook.SetFunc(Client::CalcViewModelLag);
