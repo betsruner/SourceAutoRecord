@@ -40,9 +40,13 @@ private:
 		std::string highlightImageTexture;
 		int highlightImageTextureId = -1;
 		int minHold = 0;
+		int msHoldCount = 0;
 
 		// state
 		int pressedTick = -1;
+		int lastPressTick = -1;
+		bool lastDown = false;
+		int pressCount = 0;
 	};
 
 	InputHudElement *GetElementByName(std::string name);

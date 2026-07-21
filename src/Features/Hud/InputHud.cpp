@@ -109,12 +109,11 @@ void InputHud::Paint(int slot) {
 		int eWidth = element.width * btnSize + std::max(0, element.width - 1) * btnPadding;
 		int eHeight = element.height * btnSize + std::max(0, element.height -1) * btnPadding;
 
+		int font = scheme->GetFontByID(element.textFont);
+		int fontHeight = element.textFont >= 0 ? surface->GetFontHeight(font) : 0;
+
 		if (element.isVector) {
 			//drawing movement and angles vector displays
-
-			int font = scheme->GetFontByID(element.textFont);
-
-			int fontHeight = element.textFont >= 0 ? surface->GetFontHeight(font) : 0;
 
 			// trying some kind of responsiveness here and getting the smallest side
 			const int joystickSize = std::min((int)(eHeight - fontHeight * 2.2), eWidth);
@@ -206,34 +205,53 @@ void InputHud::Paint(int slot) {
 			}
 		} else {
 			// drawing normal buttons
-			bool pressed = false;
+			bool down = false;
 			if (element.isNormalKey)
-				pressed = inputSystem->IsKeyDown((ButtonCode_t)element.type);
+				down = inputSystem->IsKeyDown((ButtonCode_t)element.type);
 			else
-				pressed = inputInfo.buttonBits & element.type;
+				down = inputInfo.buttonBits & element.type;
 
-			if (pressed && element.pressedTick == -1) {
-				element.pressedTick = tick;
+			bool active = down;
+			if (down) {
+				if (element.pressedTick == -1) {
+					element.pressedTick = tick;
+				}
+				if (!element.lastDown) {
+					element.pressCount++;
+					element.lastPressTick = tick;
+				}
+			} else {
+				if (tick - element.pressedTick < element.minHold) {
+					active = true;
+				} else if (element.pressedTick != -1) {
+					element.pressedTick = -1;
+				}
+				if ((tick - element.lastPressTick) * engine->GetIPT() >= (element.msHoldCount / 1000.0f)) {
+					element.lastPressTick = -1;
+					element.pressCount = 0;
+				}
 			}
-
-			if (!pressed && tick - element.pressedTick < element.minHold) {
-				pressed = true;
-			}
-
-			if (!pressed && element.pressedTick != -1) {
-				element.pressedTick = -1;
-			}
+			element.lastDown = down;
 
 			if (element.imageTextureId == -1) {
 				surface->DrawRectAndCenterTxt(
-					pressed ? element.highlight : element.background,
+					active ? element.highlight : element.background,
 					eX, eY, eX + eWidth, eY + eHeight,
-					scheme->GetFontByID(element.textFont),
-					pressed ? element.textHighlight : element.textColor,
+					font,
+					active ? element.textHighlight : element.textColor,
 					element.text.c_str()
 				);
+				if (element.pressCount > 1) {
+					surface->DrawRectAndCenterTxt(
+						Color(0, 0, 0, 0),
+						eX, eY + fontHeight, eX + eWidth, eY + eHeight + fontHeight,
+						font,
+						active ? element.textHighlight : element.textColor,
+						Utils::ssprintf("%d", element.pressCount).c_str()
+					);
+				}
 			} else {
-				int tex = pressed && element.highlightImageTextureId > -1 ? element.highlightImageTextureId : element.imageTextureId;
+				int tex = active && element.highlightImageTextureId > -1 ? element.highlightImageTextureId : element.imageTextureId;
 				surface->DrawSetColor(surface->matsurface->ThisPtr(), 255, 255, 255, 255);
 				surface->DrawSetTexture(surface->matsurface->ThisPtr(), tex);
 				surface->DrawTexturedRect(surface->matsurface->ThisPtr(), eX, eY, eX + eWidth, eY + eHeight);
@@ -371,6 +389,8 @@ void InputHud::ModifyElementParam(std::string name, std::string parameter, std::
 		}
 	} else if (parameter.compare("minhold") == 0) {
 		element->minHold = valueInt;
+	} else if (parameter.compare("msholdcount") == 0) {
+		element->msHoldCount = valueInt;
 	}
 }
 
@@ -387,6 +407,10 @@ void InputHud::ApplyPreset(const char* preset, bool start) {
 		PARAM("all", "image", "");
 		PARAM("all", "highlightimage", "");
 		PARAM("all", "minhold", "0");
+		PARAM("jump", "msholdcount", "200");
+		PARAM("use", "msholdcount", "200");
+		PARAM("attack", "msholdcount", "200");
+		PARAM("attack2", "msholdcount", "200");
 
 		PARAM("forward", "text", "W");
 		PARAM("back", "text", "S");
@@ -441,6 +465,7 @@ void InputHud::ApplyPreset(const char* preset, bool start) {
 		PARAM("all", "image", "");
 		PARAM("all", "highlightimage", "");
 		PARAM("all", "minhold", "0");
+		PARAM("all", "msholdcount", "200");
 
 		PARAM("forward", "enabled", "0");
 		PARAM("back", "enabled", "0");
@@ -493,7 +518,7 @@ bool InputHud::HasElement(const char* elementName) {
 }
 
 bool InputHud::IsValidParameter(const char* param) {
-	const char *validParams[] = {"enabled", "text", "font", "pos", "x", "y", "width", "height", "font", "background", "highlight", "textcolor", "texthighlight", "image", "highlightimage", "minhold"};
+	const char *validParams[] = {"enabled", "text", "font", "pos", "x", "y", "width", "height", "font", "background", "highlight", "textcolor", "texthighlight", "image", "highlightimage", "minhold", "msholdcount"};
 	
 	for (const char *validParam : validParams) {
 		if (!strcmp(validParam, param)) {
@@ -541,6 +566,8 @@ std::string InputHud::GetParameterValue(std::string name, std::string parameter)
 		return element->highlightImageTexture;
 	} else if (parameter.compare("minhold") == 0) {
 		return std::to_string(element->minHold);
+	} else if (parameter.compare("msholdcount") == 0) {
+		return std::to_string(element->msHoldCount);
 	} else {
 		return "";
 	}
@@ -599,7 +626,7 @@ DECL_COMMAND_COMPLETION(sar_ihud_modify) {
 
 CON_COMMAND_F_COMPLETION(sar_ihud_modify,
 	"sar_ihud_modify <element|all> [param=value]... - modifies parameters in given element.\n"
-    "Params: enabled, text, pos, x, y, width, height, font, background, highlight, textcolor, texthighlight, image, highlightimage, minhold.\n",
+    "Params: enabled, text, pos, x, y, width, height, font, background, highlight, textcolor, texthighlight, image, highlightimage, minhold, msholdcount.\n",
 	FCVAR_DONTRECORD, AUTOCOMPLETION_FUNCTION(sar_ihud_modify)
 ) {
 	if (args.ArgC() < 3) {
