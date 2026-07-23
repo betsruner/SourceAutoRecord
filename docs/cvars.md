@@ -186,6 +186,7 @@
 |sar_disable_progress_bar_update|0|Disables excessive usage of progress bar.|
 |sar_disable_save_status_hud|0|Disables the saving/saved HUD which appears when you make a save.|
 |sar_disable_steam_pause|0|Prevents pauses from steam overlay.|
+|sar_disable_steam_toasts|0|Disables Steam overlay rendering, including notification toasts.|
 |<i title="Portal 2&#10;Portal Stories: Mel&#10;Portal Reloaded">sar_disable_viewmodel_shadows</i>|0|Disables the shadows on the viewmodel.|
 |<i title="Portal 2">sar_disable_weapon_sway</i>|0|Disables the viewmodel lagging behind.|
 |sar_discord_rpc_app_id|1084419823737524294|Defines Discord Rich Presence's application ID.|

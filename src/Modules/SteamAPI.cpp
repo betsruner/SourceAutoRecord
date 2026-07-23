@@ -2,10 +2,40 @@
 
 #include "SAR.hpp"
 
+Variable sar_disable_steam_toasts(
+	"sar_disable_steam_toasts",
+	"0",
+	"Disables Steam overlay rendering, including notification toasts.\n");
+
+#ifdef _WIN32
+namespace {
+using _RenderSteamOverlay = void (__thiscall *)(void *thisptr);
+_RenderSteamOverlay RenderSteamOverlay = nullptr;
+_RenderSteamOverlay RenderSteamOverlay_Trampoline = nullptr;
+
+void __fastcall RenderSteamOverlay_Hook(void *thisptr, int edx) {
+	if (!sar_disable_steam_toasts.GetBool()) {
+		RenderSteamOverlay_Trampoline(thisptr);
+	}
+}
+}
+#endif
+
 bool SteamAPI::Init() {
 	const auto steam_api = Memory::GetModuleHandleByName(this->Name());
 	if (!steam_api)
 		return false;
+
+#ifdef _WIN32
+	const auto renderSteamOverlay = Memory::Scan(
+		MODULE("gameoverlayrenderer"),
+		"55 8B EC 6A ? 68 ? ? ? ? 64 A1 ? ? ? ? 50 64 89 25 ? ? ? ? 81 EC ? ? ? ? 57");
+	if (renderSteamOverlay) {
+		MH_HOOK(RenderSteamOverlay, renderSteamOverlay);
+	} else {
+		console->DevWarning("SAR: Failed to find the Steam overlay renderer.\n");
+	}
+#endif
 
 	const auto GetHSteamUser = Memory::GetSymbolAddress<void *(*)()>(steam_api, "SteamAPI_GetHSteamUser");
 	if (!GetHSteamUser)
@@ -43,6 +73,11 @@ bool SteamAPI::Init() {
 	return this->hasLoaded = this->g_timeline;
 }
 void SteamAPI::Shutdown() {
+#ifdef _WIN32
+	MH_UNHOOK(RenderSteamOverlay);
+	RenderSteamOverlay = nullptr;
+	RenderSteamOverlay_Trampoline = nullptr;
+#endif
 }
 
 SteamAPI *steam;
