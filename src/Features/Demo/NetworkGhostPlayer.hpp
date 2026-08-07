@@ -173,6 +173,8 @@ public:
 	void SendPing();
 	void ReceiveUDPUpdates(std::vector<sf::Packet> &buffer);
 	void Treat(sf::Packet &packet, bool udp);
+	void SendPacketTCP(sf::Packet &packet);
+	void SendPacketUDP(sf::Packet &packet);
 
 	void UpdateGhostsPosition();
 	std::shared_ptr<GhostEntity> GetGhostByID(uint32_t ID);

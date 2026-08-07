@@ -192,6 +192,7 @@ static void handleCoopPacket(const void *data, size_t size) {
 	g_timerInterface->total = SpeedrunTimer::GetTotalTicks();
 
 	switch (t) {
+	case PacketType::ID_REQUEST:
 	case PacketType::SYNC:
 		break;
 	case PacketType::START:
