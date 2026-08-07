@@ -53,7 +53,7 @@ std::shared_ptr<TasToolParams> SetAngleTool::ParseParams(std::vector<std::string
 	float yaw;
 	int ticks = 1;
 	AngleToolsUtils::EasingType easingType = AngleToolsUtils::EasingType::Linear;
-	int i = 2;
+	size_t i = 2;
 
 	if (vp[0] == "off") {
 		if (vp.size() != 1) throw TasParserArgumentCountException(this, vp.size());

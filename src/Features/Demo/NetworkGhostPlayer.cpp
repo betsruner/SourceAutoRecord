@@ -370,7 +370,7 @@ void NetworkManager::Connect(sf::IpAddress ip, unsigned short int port, bool spe
 
 		sf::Packet connection_packet;
 		connection_packet << HEADER::CONNECT << this->udpSocket.getLocalPort() << this->name.c_str() << DataGhost{{0, 0, 0}, {0, 0, 0}, 0, false} << this->modelName.c_str() << engine->GetCurrentMapName().c_str() << ghost_TCP_only.GetBool() << GhostEntity::set_color << spectator;
-		this->tcpSocket.send(connection_packet);
+		SendPacketTCP(connection_packet);
 
 		{
 			sf::SocketSelector tcpSelector;
@@ -470,7 +470,7 @@ void NetworkManager::Disconnect() {
 
 		sf::Packet packet;
 		packet << HEADER::DISCONNECT << this->ID;
-		this->tcpSocket.send(packet);
+		SendPacketTCP(packet);
 
 		this->selector.clear();
 		this->tcpSocket.disconnect();
@@ -557,9 +557,9 @@ void NetworkManager::SendPlayerData() {
 		}
 
 		if (!ghost_TCP_only.GetBool()) {
-			this->udpSocket.send(packet, this->serverIP, this->serverPort);
+			SendPacketUDP(packet);
 		} else {
-			this->tcpSocket.send(packet);
+			SendPacketTCP(packet);
 		}
 	}
 
@@ -590,9 +590,9 @@ void NetworkManager::SendPlayerData() {
 				packet.append(buffer, sizeof(msg) + nBytesWritten);
 
 				if (!ghost_TCP_only.GetBool()) {
-					this->udpSocket.send(packet, this->serverIP, this->serverPort);
+					SendPacketUDP(packet);
 				} else {
-					this->tcpSocket.send(packet);
+					SendPacketTCP(packet);
 				}
 			}
 		}
@@ -623,7 +623,7 @@ void NetworkManager::NotifyMapChange() {
 	ghostLeaderboard.GhostLoad(this->ID, this->splitTicksTotal, ghost_sync.GetBool());
 
 	packet << HEADER::MAP_CHANGE << this->ID << engine->GetCurrentMapName().c_str() << this->splitTicks << this->splitTicksTotal;
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 }
 
 void NetworkManager::NotifySpeedrunFinished(const bool CM) {
@@ -648,14 +648,14 @@ void NetworkManager::NotifySpeedrunFinished(const bool CM) {
 
 	packet << time.c_str();
 
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 }
 
 void NetworkManager::SendMessageToAll(std::string msg) {
 	addToNetDump("send-message", msg.c_str());
 	sf::Packet packet;
 	packet << HEADER::MESSAGE << this->ID << msg.c_str();
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 	std::string name = this->name;
 	if (this->spectator) name += " (spectator)";
 	this->PrintMessage(name.c_str(), GhostEntity::set_color, msg);
@@ -738,7 +738,7 @@ void NetworkManager::SendPing() {
 	addToNetDump("send-ping", nullptr);
 	sf::Packet packet;
 	packet << HEADER::PING << this->ID;
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 	this->pingClock.restart();
 }
 
@@ -915,10 +915,10 @@ void NetworkManager::Treat(sf::Packet &packet, bool udp) {
 		response << HEADER::HEART_BEAT << this->ID << token;
 		if (udp) {
 			addToNetDump("send-heartbeat", Utils::ssprintf("UDP;%X", token).c_str());
-			this->udpSocket.send(response, this->serverIP, this->serverPort);
+			SendPacketUDP(response);
 		} else {
 			addToNetDump("send-heartbeat", Utils::ssprintf("TCP;%X", token).c_str());
-			this->tcpSocket.send(response);
+			SendPacketTCP(response);
 		}
 		break;
 	}
@@ -954,7 +954,7 @@ void NetworkManager::Treat(sf::Packet &packet, bool udp) {
 			sf::Packet confirm_packet;
 			confirm_packet << HEADER::COUNTDOWN << this->ID << uint8_t(1);
 			addToNetDump("send-countdown", "1");
-			this->tcpSocket.send(confirm_packet);
+			SendPacketTCP(confirm_packet);
 		} else if (step == 1) {  //	Exec
 			this->StartCountdown();
 		}
@@ -1135,6 +1135,24 @@ void NetworkManager::Treat(sf::Packet &packet, bool udp) {
 	}
 }
 
+void NetworkManager::SendPacketTCP(sf::Packet &packet) {
+	Scheduler::OnMainThread([=]() mutable {
+		auto status = this->tcpSocket.send(packet);
+		if (status != sf::Socket::Status::Done) {
+			console->Print("Failed to send packet to server: %d\n", status);
+		}
+	});
+}
+
+void NetworkManager::SendPacketUDP(sf::Packet &packet) {
+	Scheduler::OnMainThread([=]() mutable {
+		auto status = this->udpSocket.send(packet, this->serverIP, this->serverPort);
+		if (status != sf::Socket::Status::Done) {
+			console->Print("Failed to send packet to server: %d\n", status);
+		}
+	});
+}
+
 void NetworkManager::UpdateGhostsPosition() {
 	// Copy the pool since rendering via Lerp tries to lock the pool
 	// further down in processing
@@ -1180,7 +1198,7 @@ void NetworkManager::UpdateModel(const std::string modelName) {
 		sf::Packet packet;
 		addToNetDump("send-model-change", modelName.c_str());
 		packet << HEADER::MODEL_CHANGE << this->ID << this->modelName.c_str();
-		this->tcpSocket.send(packet);
+		SendPacketTCP(packet);
 	}
 }
 
@@ -1190,7 +1208,7 @@ void NetworkManager::UpdateColor() {
 	addToNetDump("send-color-change", Utils::ssprintf("%02X%02X%02X", col.r, col.g, col.b).c_str());
 	sf::Packet packet;
 	packet << HEADER::COLOR_CHANGE << this->ID << col;
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 }
 
 void NetworkManager::NotifyTaunt(const std::string name) {
@@ -1198,7 +1216,7 @@ void NetworkManager::NotifyTaunt(const std::string name) {
 	addToNetDump("send-taunt", name.c_str());
 	sf::Packet packet;
 	packet << HEADER::TAUNT << this->ID << name.c_str();
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 }
 
 void NetworkManager::NotifyLocator(Vector position, Vector normal) {
@@ -1206,7 +1224,7 @@ void NetworkManager::NotifyLocator(Vector position, Vector normal) {
 	addToNetDump("send-locator", Utils::ssprintf("%d;%.1f,%.1f,%.1f;%.1f,%.1f,%.1f", this->ID, position.x, position.y, position.z, normal.x, normal.y, normal.z).c_str());
 	sf::Packet packet;
 	packet << HEADER::LOCATOR << this->ID << position << normal;
-	this->tcpSocket.send(packet);
+	SendPacketTCP(packet);
 }
 
 bool NetworkManager::AreAllGhostsAheadOrSameMap() {
